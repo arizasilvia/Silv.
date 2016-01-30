@@ -1,0 +1,83 @@
+
+# Sílvia Ariza Sentís - Final Project on Machine Learning
+### Importing data
+
+downloadcsv <- function(url, nastrings) {
+  temp <- tempfile()
+  download.file(url, temp, method = "curl")
+  data <- read.csv(temp, na.strings = nastrings)
+  unlink(temp)
+  return(data)
+}
+
+trainurl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+
+train <- downloadcsv(trainurl, c("", "NA", "#DIV/0!"))
+
+testurl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+test <- downloadcsv(testurl, c("", "NA", "#DIV/0!"))
+
+dim(train) 
+
+#### (The training data has 19622 observations and 160 features)
+
+table(train$classe)
+
+### Partitioning the training set
+library(caret)
+
+set.seed(123456)
+
+trainset <- createDataPartition(train$classe, p = 0.8, list = FALSE)
+
+Training <- train[trainset, ]
+
+Validation <- train[-trainset, ]
+
+### Feature selection
+
+#### Exclude near zero variance features
+nzvcol <- nearZeroVar(Training)
+
+Training <- Training[, -nzvcol]
+
+#### Exclude columns with 40% ore more missing values exclude descriptive columns like name
+
+cntlength <- sapply(Training, function(x) {
+    sum(!(is.na(x) | x == ""))
+})
+
+nullcol <- names(cntlength[cntlength < 0.6 * length(Training$classe)])
+
+descriptcol <- c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", 
+    "cvtd_timestamp", "new_window", "num_window")
+
+excludecols <- c(descriptcol, nullcol)
+
+Training <- Training[, !names(Training) %in% excludecols]
+
+### Model train
+library(randomForest) # Random forest for the regression and classification
+
+rfModel <- randomForest(classe ~ ., data = Training, importance = TRUE, ntrees = 10)
+
+### Model validation
+ptraining <- predict(rfModel, Training)
+
+print(confusionMatrix(ptraining, Training$classe))
+
+#### It performs excellent against the training set, but we need to cross validate the performance against the held out set and see if we have avoided overfitting.
+pvalidation <- predict(rfModel, Validation)
+
+print(confusionMatrix(pvalidation, Validation$classe))
+
+#### The cross validation accuracy is 99.5% and the out-of-sample error is therefore 0.5% so our model performs rather good.
+
+### Test set prediction
+
+ptest <- predict(rfModel, test)
+ptest
+
+
+
